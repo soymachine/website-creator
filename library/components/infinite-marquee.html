@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Marquee infinito</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    background: #f5f4f0;
+    color: #0e0e12;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+  }
+  .stage {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+    overflow: hidden;
+  }
+  .marquee {
+    width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    border-top: 1px solid #0e0e12;
+    border-bottom: 1px solid #0e0e12;
+    padding: 1.25rem 0;
+  }
+  .marquee__track {
+    display: inline-flex;
+    gap: 3rem;
+    animation: scroll 18s linear infinite;
+  }
+  .marquee--reverse .marquee__track {
+    animation-direction: reverse;
+    animation-duration: 24s;
+  }
+  .marquee__track span {
+    font-size: clamp(2rem, 6vw, 4.5rem);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: -0.02em;
+  }
+  .marquee__track span::after {
+    content: '✦';
+    margin-left: 3rem;
+    font-size: 1.5rem;
+    vertical-align: middle;
+    opacity: 0.4;
+  }
+  @keyframes scroll {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="marquee">
+      <div class="marquee__track">
+        <span>Diseño</span><span>Animación</span><span>Interacción</span><span>Awwwards</span>
+        <span>Diseño</span><span>Animación</span><span>Interacción</span><span>Awwwards</span>
+      </div>
+    </div>
+    <div class="marquee marquee--reverse">
+      <div class="marquee__track">
+        <span>Creatividad</span><span>Movimiento</span><span>Detalle</span><span>Experiencia</span>
+        <span>Creatividad</span><span>Movimiento</span><span>Detalle</span><span>Experiencia</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

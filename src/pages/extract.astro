@@ -1,0 +1,256 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+<Layout title="Extraer componentes">
+  <h1>Extraer componentes desde una URL</h1>
+  <p class="subtitle">
+    Pega la URL de una web (idealmente algo visualmente impactante, como una página de
+    Awwwards) y Claude analizará su estructura para identificar y recrear sus componentes
+    visuales más distintivos.
+  </p>
+
+  <form id="extract-form" class="extract-form">
+    <input type="url" id="url-input" placeholder="https://ejemplo.com" required />
+    <button type="submit" class="btn btn-primary" id="analyze-btn">Analizar</button>
+  </form>
+
+  <div id="status" class="status"></div>
+
+  <div id="results" class="results"></div>
+
+  <template id="result-template">
+    <article class="result-card card">
+      <div class="preview">
+        <iframe sandbox="allow-scripts" loading="lazy"></iframe>
+      </div>
+      <div class="info">
+        <div class="info-header">
+          <h3 class="result-name"></h3>
+          <label class="select-toggle">
+            <input type="checkbox" class="result-select" />
+            <span>Guardar</span>
+          </label>
+        </div>
+        <p class="description result-description"></p>
+        <div class="tags result-tags"></div>
+      </div>
+    </article>
+  </template>
+</Layout>
+
+<style>
+  h1 { margin: 0 0 0.5rem; font-size: 1.75rem; }
+  .subtitle { color: var(--text-dim); max-width: 60ch; line-height: 1.6; margin-bottom: 1.5rem; }
+
+  .extract-form {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+  .extract-form input { flex: 1; }
+
+  .status {
+    min-height: 1.5rem;
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    margin-bottom: 1.5rem;
+  }
+  .status.error { color: #ff7a7a; }
+
+  .results {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 1.25rem;
+    margin-bottom: 2rem;
+  }
+
+  .result-card {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .preview {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 10;
+    overflow: hidden;
+    background: #000;
+  }
+  .preview iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1280px;
+    height: 800px;
+    border: 0;
+    transform: scale(var(--scale, 0.265));
+    transform-origin: top left;
+  }
+  .info {
+    padding: 1rem 1.25rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  .info-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+  .info-header h3 { margin: 0; font-size: 1rem; font-weight: 600; }
+  .description { margin: 0; font-size: 0.85rem; color: var(--text-dim); line-height: 1.5; }
+  .tags { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+  .select-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .select-toggle input { accent-color: var(--accent); }
+
+  .save-bar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 2rem;
+  }
+</style>
+
+<script>
+  const form = document.getElementById('extract-form') as HTMLFormElement;
+  const urlInput = document.getElementById('url-input') as HTMLInputElement;
+  const analyzeBtn = document.getElementById('analyze-btn') as HTMLButtonElement;
+  const statusEl = document.getElementById('status')!;
+  const resultsEl = document.getElementById('results')!;
+  const template = document.getElementById('result-template') as HTMLTemplateElement;
+
+  interface ExtractedComponent {
+    name: string;
+    description: string;
+    tags: string[];
+    libraries: string[];
+    html: string;
+  }
+
+  let lastResults: ExtractedComponent[] = [];
+  let sourceUrl = '';
+  let saveBar: HTMLElement | null = null;
+
+  function setScale(preview: HTMLElement) {
+    const update = () => {
+      const scale = preview.clientWidth / 1280;
+      preview.style.setProperty('--scale', String(scale));
+    };
+    update();
+    new ResizeObserver(update).observe(preview);
+  }
+
+  function renderResults(components: ExtractedComponent[]) {
+    resultsEl.innerHTML = '';
+    saveBar?.remove();
+    saveBar = null;
+
+    components.forEach((component, index) => {
+      const node = template.content.cloneNode(true) as DocumentFragment;
+      const iframe = node.querySelector('iframe') as HTMLIFrameElement;
+      const preview = node.querySelector('.preview') as HTMLElement;
+      const nameEl = node.querySelector('.result-name')!;
+      const descEl = node.querySelector('.result-description')!;
+      const tagsEl = node.querySelector('.result-tags')!;
+      const checkbox = node.querySelector('.result-select') as HTMLInputElement;
+
+      iframe.srcdoc = component.html;
+      nameEl.textContent = component.name;
+      descEl.textContent = component.description;
+      checkbox.dataset.index = String(index);
+
+      [...component.libraries, ...component.tags].forEach((label, i) => {
+        const span = document.createElement('span');
+        span.className = i < component.libraries.length ? 'tag tag-lib' : 'tag';
+        span.textContent = label;
+        tagsEl.appendChild(span);
+      });
+
+      resultsEl.appendChild(node);
+      setScale(preview);
+    });
+
+    if (components.length > 0) {
+      saveBar = document.createElement('div');
+      saveBar.className = 'save-bar';
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-primary';
+      btn.textContent = 'Guardar seleccionados';
+      btn.addEventListener('click', saveSelected);
+      saveBar.appendChild(btn);
+      resultsEl.after(saveBar);
+    }
+  }
+
+  async function saveSelected() {
+    const checkboxes = resultsEl.querySelectorAll<HTMLInputElement>('.result-select:checked');
+    if (checkboxes.length === 0) {
+      statusEl.textContent = 'Selecciona al menos un componente para guardar.';
+      statusEl.classList.add('error');
+      return;
+    }
+
+    statusEl.classList.remove('error');
+    statusEl.textContent = 'Guardando...';
+
+    let savedCount = 0;
+    for (const checkbox of checkboxes) {
+      const index = Number(checkbox.dataset.index);
+      const component = lastResults[index];
+      const res = await fetch('/api/components', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...component, sourceUrl }),
+      });
+      if (res.ok) savedCount++;
+    }
+
+    statusEl.textContent = `${savedCount} componente${savedCount === 1 ? '' : 's'} guardado${savedCount === 1 ? '' : 's'}. Ve al dashboard para verlos.`;
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const url = urlInput.value.trim();
+    if (!url) return;
+
+    sourceUrl = url;
+    analyzeBtn.disabled = true;
+    statusEl.classList.remove('error');
+    statusEl.textContent = 'Analizando la página... esto puede tardar 30-60 segundos.';
+    resultsEl.innerHTML = '';
+    saveBar?.remove();
+    saveBar = null;
+
+    try {
+      const res = await fetch('/api/extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al analizar la URL.');
+
+      lastResults = data.components ?? [];
+      if (lastResults.length === 0) {
+        statusEl.textContent = 'No se identificaron componentes en esta página.';
+        return;
+      }
+
+      statusEl.textContent = `${lastResults.length} componente${lastResults.length === 1 ? '' : 's'} encontrado${lastResults.length === 1 ? '' : 's'}. Selecciona los que quieras guardar.`;
+      renderResults(lastResults);
+    } catch (err) {
+      statusEl.textContent = `Error: ${err instanceof Error ? err.message : String(err)}`;
+      statusEl.classList.add('error');
+    } finally {
+      analyzeBtn.disabled = false;
+    }
+  });
+</script>

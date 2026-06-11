@@ -1,0 +1,147 @@
+---
+import type { ComponentMeta } from '../types';
+
+interface Props {
+  meta: ComponentMeta;
+  html: string;
+  selectable?: boolean;
+}
+
+const { meta, html, selectable = true } = Astro.props;
+---
+<article class="component-card" data-slug={meta.slug} data-tags={meta.tags.join(',')} data-libraries={meta.libraries.join(',')} data-name={meta.name.toLowerCase()}>
+  <div class="preview">
+    <iframe srcdoc={html} sandbox="allow-scripts" loading="lazy" title={meta.name}></iframe>
+    <a class="preview-link" href={`/component/${meta.slug}`} aria-label={`Ver ${meta.name} a pantalla completa`}></a>
+  </div>
+  <div class="info">
+    <div class="info-header">
+      <h3>{meta.name}</h3>
+      {selectable && (
+        <label class="select-toggle">
+          <input type="checkbox" class="component-select" data-slug={meta.slug} />
+          <span>Seleccionar</span>
+        </label>
+      )}
+    </div>
+    <p class="description">{meta.description}</p>
+    <div class="tags">
+      {meta.libraries.map((lib) => <span class="tag tag-lib">{lib}</span>)}
+      {meta.tags.map((tag) => <span class="tag">{tag}</span>)}
+    </div>
+    <div class="actions">
+      <a class="btn btn-small" href={`/component/${meta.slug}`}>Ver</a>
+      <button class="btn btn-small btn-danger delete-btn" data-slug={meta.slug}>Borrar</button>
+    </div>
+  </div>
+</article>
+
+<style>
+  .component-card {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-elev);
+    transition: border-color 0.15s ease, transform 0.15s ease;
+  }
+  .component-card:hover { border-color: var(--accent); }
+  .component-card.is-hidden { display: none; }
+  .component-card.is-selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+  .preview {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 10;
+    overflow: hidden;
+    background: #000;
+  }
+  .preview iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1280px;
+    height: 800px;
+    border: 0;
+    transform: scale(var(--scale, 0.25));
+    transform-origin: top left;
+    pointer-events: none;
+  }
+  .preview-link {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+  }
+
+  .info {
+    padding: 1rem 1.25rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  .info-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+  .info-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+  .select-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .select-toggle input { accent-color: var(--accent); }
+
+  .description {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .tag-lib { background: rgba(255, 255, 255, 0.08); color: var(--text-dim); }
+
+  .actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+  }
+  .btn-small {
+    padding: 0.4rem 0.9rem;
+    font-size: 0.8rem;
+  }
+  .btn-danger:hover {
+    border-color: #ff5c5c;
+    color: #ff5c5c;
+  }
+</style>
+
+<script>
+  function setupPreviewScaling() {
+    document.querySelectorAll<HTMLElement>('.preview').forEach((el) => {
+      const update = () => {
+        const scale = el.clientWidth / 1280;
+        el.style.setProperty('--scale', String(scale));
+      };
+      update();
+      new ResizeObserver(update).observe(el);
+    });
+  }
+
+  setupPreviewScaling();
+</script>

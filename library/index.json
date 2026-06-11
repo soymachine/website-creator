@@ -1,0 +1,48 @@
+[
+  {
+    "slug": "hero-text-reveal",
+    "name": "Hero — Text Reveal",
+    "description": "Hero a pantalla completa con titulares que se revelan línea a línea mediante animación de máscara y stagger con GSAP.",
+    "tags": [
+      "hero",
+      "text-animation",
+      "scroll-reveal"
+    ],
+    "libraries": [
+      "GSAP"
+    ],
+    "sourceUrl": "https://example.com",
+    "createdAt": "2026-06-01T10:00:00.000Z"
+  },
+  {
+    "slug": "magnetic-cursor",
+    "name": "Cursor magnético",
+    "description": "Cursor personalizado que sigue al puntero con suavizado e interactúa con botones magnéticos al pasar por encima.",
+    "tags": [
+      "cursor",
+      "interaction",
+      "navigation"
+    ],
+    "libraries": [
+      "CSS",
+      "JavaScript"
+    ],
+    "sourceUrl": "https://example.com",
+    "createdAt": "2026-06-01T10:05:00.000Z"
+  },
+  {
+    "slug": "infinite-marquee",
+    "name": "Marquee infinito",
+    "description": "Dos bandas de texto en movimiento continuo y direcciones opuestas, típico de secciones de servicios o branding.",
+    "tags": [
+      "marquee",
+      "branding",
+      "typography"
+    ],
+    "libraries": [
+      "CSS"
+    ],
+    "sourceUrl": "https://example.com",
+    "createdAt": "2026-06-01T10:10:00.000Z"
+  }
+]

@@ -1,0 +1,92 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { getComponentMeta, getComponentHtml } from '../../lib/library';
+
+export const prerender = false;
+
+const { slug } = Astro.params;
+const meta = slug ? await getComponentMeta(slug) : null;
+const html = slug ? await getComponentHtml(slug) : null;
+
+if (!meta || html === null) {
+  return Astro.redirect('/');
+}
+---
+<Layout title={meta.name}>
+  <div class="header">
+    <div>
+      <a class="back-link" href="/">&larr; Dashboard</a>
+      <h1>{meta.name}</h1>
+      <p class="description">{meta.description}</p>
+      <div class="tags">
+        {meta.libraries.map((lib) => <span class="tag tag-lib">{lib}</span>)}
+        {meta.tags.map((tag) => <span class="tag">{tag}</span>)}
+      </div>
+      {meta.sourceUrl && (
+        <p class="source">
+          Fuente: <a href={meta.sourceUrl} target="_blank" rel="noopener noreferrer">{meta.sourceUrl}</a>
+        </p>
+      )}
+    </div>
+    <button class="btn btn-danger" id="delete-btn" data-slug={meta.slug}>Borrar componente</button>
+  </div>
+
+  <div class="full-preview card">
+    <iframe srcdoc={html} sandbox="allow-scripts" title={meta.name}></iframe>
+  </div>
+</Layout>
+
+<style>
+  .header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .back-link {
+    display: inline-block;
+    color: var(--text-dim);
+    text-decoration: none;
+    font-size: 0.85rem;
+    margin-bottom: 0.75rem;
+  }
+  .back-link:hover { color: var(--text); }
+  h1 { margin: 0 0 0.5rem; font-size: 1.5rem; }
+  .description { color: var(--text-dim); max-width: 60ch; line-height: 1.6; margin: 0 0 0.75rem; }
+  .tags { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.5rem; }
+  .tag-lib { background: rgba(255, 255, 255, 0.08); color: var(--text-dim); }
+  .source { font-size: 0.8rem; color: var(--text-dim); }
+  .source a { color: var(--accent); }
+  .btn-danger:hover { border-color: #ff5c5c; color: #ff5c5c; }
+
+  .full-preview {
+    width: 100%;
+    height: calc(100vh - 280px);
+    min-height: 480px;
+    overflow: hidden;
+  }
+  .full-preview iframe {
+    width: 100%;
+    height: 100%;
+    border: 0;
+  }
+</style>
+
+<script>
+  const deleteBtn = document.getElementById('delete-btn') as HTMLButtonElement;
+  deleteBtn.addEventListener('click', async () => {
+    const slug = deleteBtn.dataset.slug!;
+    if (!confirm(`¿Borrar el componente "${slug}"? Esta acción no se puede deshacer.`)) return;
+
+    deleteBtn.disabled = true;
+    const res = await fetch(`/api/components/${slug}`, { method: 'DELETE' });
+    if (res.ok) {
+      window.location.href = '/';
+    } else {
+      deleteBtn.disabled = false;
+      alert('No se pudo borrar el componente.');
+    }
+  });
+</script>

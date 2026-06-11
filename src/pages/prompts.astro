@@ -1,0 +1,72 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { listPromptRecords } from '../lib/library';
+
+export const prerender = false;
+
+const records = await listPromptRecords();
+---
+<Layout title="Historial de prompts">
+  <h1>Historial de prompts generados</h1>
+  <p class="subtitle">{records.length} prompt{records.length === 1 ? '' : 's'} guardado{records.length === 1 ? '' : 's'} en library/prompts/</p>
+
+  {records.length === 0 ? (
+    <div class="empty-state card">
+      <p>Aún no has generado ningún prompt.</p>
+      <a class="btn btn-primary" href="/">Ir al dashboard</a>
+    </div>
+  ) : (
+    <div class="prompt-list">
+      {records.map((record) => (
+        <details class="prompt-item card">
+          <summary>
+            <span class="filename">{record.filename}</span>
+            <span class="components">{record.componentSlugs.join(', ')}</span>
+          </summary>
+          <pre class="content">{record.content}</pre>
+        </details>
+      ))}
+    </div>
+  )}
+</Layout>
+
+<style>
+  h1 { margin: 0 0 0.25rem; font-size: 1.75rem; }
+  .subtitle { margin: 0 0 1.5rem; color: var(--text-dim); font-size: 0.9rem; }
+
+  .empty-state {
+    padding: 4rem 2rem;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    color: var(--text-dim);
+  }
+
+  .prompt-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .prompt-item { padding: 1rem 1.25rem; }
+  .prompt-item summary {
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  .filename { font-weight: 600; font-size: 0.9rem; }
+  .components { color: var(--text-dim); font-size: 0.8rem; }
+  .content {
+    white-space: pre-wrap;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.85rem;
+    line-height: 1.6;
+    color: var(--text-dim);
+  }
+</style>

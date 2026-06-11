@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Hero — Text Reveal</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    background: #0b0b0e;
+    color: #f5f5f5;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    overflow: hidden;
+  }
+  .hero {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 1.25rem;
+  }
+  .eyebrow {
+    letter-spacing: 0.4em;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    color: #8a8a93;
+    overflow: hidden;
+  }
+  .eyebrow span { display: inline-block; transform: translateY(120%); }
+  .title {
+    font-size: clamp(2.5rem, 9vw, 7rem);
+    font-weight: 700;
+    line-height: 1.05;
+    overflow: hidden;
+  }
+  .title .line { overflow: hidden; }
+  .title .line span {
+    display: inline-block;
+    transform: translateY(110%);
+  }
+  .sub {
+    max-width: 32rem;
+    color: #b5b5bd;
+    font-size: 1rem;
+    opacity: 0;
+    transform: translateY(20px);
+  }
+</style>
+</head>
+<body>
+  <section class="hero">
+    <p class="eyebrow"><span>Component Studio</span></p>
+    <h1 class="title">
+      <span class="line"><span>Diseño que</span></span>
+      <span class="line"><span>se revela</span></span>
+    </h1>
+    <p class="sub">Animación de entrada por líneas y caracteres con GSAP, ideal para heroes de impacto.</p>
+  </section>
+
+  <script>
+    gsap.timeline({ defaults: { ease: 'expo.out', duration: 1.1 } })
+      .to('.eyebrow span', { y: '0%', duration: 0.8 })
+      .to('.title .line span', { y: '0%', stagger: 0.12 }, '-=0.4')
+      .to('.sub', { opacity: 1, y: 0, duration: 0.8 }, '-=0.5');
+  </script>
+</body>
+</html>
