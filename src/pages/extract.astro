@@ -10,13 +10,20 @@ import Layout from '../layouts/Layout.astro';
   </p>
 
   <form id="extract-form" class="extract-form">
-    <input type="url" id="url-input" placeholder="https://ejemplo.com" required />
-    <select id="provider-select" class="provider-select" title="Modelo a usar">
-      <option value="anthropic">Claude (Anthropic)</option>
-      <option value="deepseek">DeepSeek</option>
-      <option value="kimi">Kimi (Moonshot)</option>
-    </select>
-    <button type="submit" class="btn btn-primary" id="analyze-btn">Analizar</button>
+    <div class="form-row">
+      <input type="url" id="url-input" placeholder="https://ejemplo.com" required />
+      <select id="provider-select" class="provider-select" title="Modelo a usar">
+        <option value="anthropic">Claude (Anthropic)</option>
+        <option value="deepseek">DeepSeek</option>
+        <option value="kimi">Kimi (Moonshot)</option>
+      </select>
+      <button type="submit" class="btn btn-primary" id="analyze-btn">Analizar</button>
+    </div>
+    <textarea
+      id="focus-input"
+      rows="2"
+      placeholder="Opcional: ¿qué te interesa de esta web? Ej: 'la escena 3D del hero con partículas que reaccionan al ratón' o 'la galería horizontal que aparece al hacer scroll'"
+    ></textarea>
   </form>
 
   <div id="status" class="status"></div>
@@ -49,10 +56,15 @@ import Layout from '../layouts/Layout.astro';
 
   .extract-form {
     display: flex;
+    flex-direction: column;
     gap: 0.75rem;
     margin-bottom: 1rem;
   }
-  .extract-form input { flex: 1; }
+  .form-row {
+    display: flex;
+    gap: 0.75rem;
+  }
+  .form-row input { flex: 1; }
   .provider-select {
     background: var(--bg-elev-2);
     border: 1px solid var(--border);
@@ -137,6 +149,7 @@ import Layout from '../layouts/Layout.astro';
   const urlInput = document.getElementById('url-input') as HTMLInputElement;
   const analyzeBtn = document.getElementById('analyze-btn') as HTMLButtonElement;
   const statusEl = document.getElementById('status')!;
+  const focusInput = document.getElementById('focus-input') as HTMLTextAreaElement;
   const providerSelect = document.getElementById('provider-select') as HTMLSelectElement;
 
   providerSelect.value = localStorage.getItem('llm-provider') || 'anthropic';
@@ -243,7 +256,8 @@ import Layout from '../layouts/Layout.astro';
     sourceUrl = url;
     analyzeBtn.disabled = true;
     statusEl.classList.remove('error');
-    statusEl.textContent = 'Analizando la página... esto puede tardar 30-60 segundos.';
+    statusEl.textContent =
+      'Estudiando la página a fondo y generando cada componente por separado... esto puede tardar 2-4 minutos.';
     resultsEl.innerHTML = '';
     saveBar?.remove();
     saveBar = null;
@@ -252,7 +266,7 @@ import Layout from '../layouts/Layout.astro';
       const res = await fetch('/api/extract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, provider: providerSelect.value }),
+        body: JSON.stringify({ url, focus: focusInput.value.trim(), provider: providerSelect.value }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al analizar la URL.');

@@ -75,52 +75,85 @@ function getOpenAICompatClient(provider: Exclude<ProviderId, 'anthropic'>): {
   };
 }
 
-const EXTRACT_SYSTEM_PROMPT = `Eres un experto en frontend, animaciones web (GSAP, Framer Motion, Three.js, WebGL, scroll-driven animations) y diseño de webs premiadas en Awwwards.
+/**
+ * Llamada genérica con salida estructurada: tool use en Anthropic, JSON mode
+ * en proveedores OpenAI-compatible.
+ */
+async function callStructured(input: {
+  provider: ProviderId;
+  system: string;
+  user: string;
+  tool: Anthropic.Tool;
+  jsonInstructions: string;
+  anthropicMaxTokens: number;
+}): Promise<unknown> {
+  if (input.provider === 'anthropic') {
+    const { client, model } = getAnthropicClient();
+    const response = await client.messages.create({
+      model,
+      max_tokens: input.anthropicMaxTokens,
+      system: input.system,
+      tools: [input.tool],
+      tool_choice: { type: 'tool', name: input.tool.name },
+      messages: [{ role: 'user', content: input.user }],
+    });
+    const toolUse = response.content.find(
+      (block): block is Anthropic.ToolUseBlock => block.type === 'tool_use'
+    );
+    if (!toolUse) throw new Error('El modelo no devolvió una respuesta estructurada.');
+    return toolUse.input;
+  }
 
-Recibirás el HTML (y posiblemente fragmentos de CSS/JS referenciados, además de una lista de "señales técnicas detectadas") de una página web. Tu tarea es identificar los componentes visuales e interactivos más distintivos de esa página: heroes animados, menús con transiciones, cursores personalizados, reveals al hacer scroll, escenas 3D/WebGL, fondos con shaders o partículas, carruseles, marquees infinitos, efectos de parallax, etc.
+  const { client, model, maxOutputTokens } = getOpenAICompatClient(input.provider);
+  const response = await client.chat.completions.create({
+    model,
+    max_tokens: maxOutputTokens,
+    response_format: { type: 'json_object' },
+    messages: [
+      { role: 'system', content: `${input.system}\n\n${input.jsonInstructions}` },
+      { role: 'user', content: input.user },
+    ],
+  });
+  const raw = response.choices[0]?.message?.content;
+  if (!raw) throw new Error('El modelo no devolvió respuesta.');
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new Error('El modelo devolvió un JSON inválido. Inténtalo de nuevo.');
+  }
+}
 
-Para CADA componente que identifiques, debes generar una RECREACIÓN AUTOCONTENIDA: un único documento HTML completo (con <!DOCTYPE html>, <head> y <body>) que incluya todo el CSS (en <style>) y JS (en <script>) necesario, y que demuestre visualmente el comportamiento del componente al abrirse en un navegador, sin ningún paso de build.
+// ---------------------------------------------------------------------------
+// FASE 1 — Estudio a fondo de la página: el modelo actúa como ingeniero
+// inverso y produce un plan detallado de componentes, sin generar HTML aún.
+// ---------------------------------------------------------------------------
 
-Reglas importantes:
-- NO copies literalmente el código fuente de la web (probablemente esté minificado, ofuscado o sea inviable). En su lugar, REINTERPRETA el efecto visual de forma fiel y funcional, recreándolo con HTML/CSS/JS limpio y legible.
-- Si el componente usa una librería (GSAP, Three.js, anime.js, Pixi.js, etc.), puedes cargarla mediante <script src="https://cdn..."> mediante un CDN público (cdnjs o unpkg).
-- Cada snippet debe ser visualmente atractivo y centrado en demostrar SOLO ese componente (puedes incluir un fondo oscuro neutro y algo de contenido de ejemplo).
-- Identifica entre 1 y 4 componentes, priorizando los más distintivos e interesantes visualmente.
-- Para "tags" usa palabras clave en minúsculas relevantes (ej: "hero", "scroll-reveal", "cursor", "marquee", "carousel", "navigation", "parallax", "3d", "text-animation", "webgl", "shader").
-- Para "libraries" indica las librerías usadas en tu recreación (ej: "GSAP", "Three.js", "Pixi.js", "CSS", "anime.js"). Usa "CSS" si es solo CSS/JS vanilla.
+interface ComponentPlan {
+  name: string;
+  description: string;
+  tags: string[];
+  libraries: string[];
+  technicalNotes: string;
+}
 
-## Componentes 3D / WebGL / shaders
+const ANALYZE_SYSTEM_PROMPT = `Eres un ingeniero inverso experto en webs creativas premiadas en Awwwards: animaciones GSAP/ScrollTrigger, escenas Three.js/WebGL, shaders GLSL, smooth scroll (Lenis), cursores custom, transiciones de página, tipografía cinética.
 
-Si en el material recibido detectas señales de Three.js, WebGL crudo, Pixi.js, shaders GLSL o elementos <canvas>, NO los descartes ni los sustituyas por un componente más simple. Trátalos como prioritarios:
-- Recrea la escena con Three.js cargado vía CDN (ej. unpkg.com/three@0.160.0/build/three.min.js), montando un <canvas> a pantalla completa.
-- Usa primitivas razonables (geometrías, partículas, gradientes animados, distorsión con shaders simples en ShaderMaterial) que evoquen el mismo "mood" visual aunque no repliquen el shader exacto original.
-- Incluye un bucle de animación (requestAnimationFrame) para que la escena se vea viva nada más cargar, sin depender de interacción del usuario.
-- Maneja el evento resize de window para que el canvas/renderer se ajuste al iframe.
+Recibirás el material extraído de una página web (HTML, fragmentos de CSS/JS, lista de señales técnicas detectadas) y opcionalmente una indicación del usuario sobre qué le interesa de esa web. Tu trabajo en esta fase NO es generar código: es ESTUDIAR el material a fondo y producir un informe de los componentes visuales/interactivos más impactantes de la página.
 
-## Componentes con interactividad basada en el ratón (cursores, magnetismo, parallax, tilt 3D, etc.)
+Cómo estudiar el material (hazlo metódicamente, sección a sección):
+1. Recorre TODO el HTML de arriba a abajo, incluyendo las secciones del final del documento: muchas de las piezas más espectaculares (galerías horizontales, escenas 3D, footers animados) viven en secciones que solo se ven tras hacer scroll. La posición en el DOM no indica importancia.
+2. Busca evidencia indirecta de efectos que el HTML estático no muestra: elementos <canvas> y sus contenedores, atributos data-* (data-scroll, data-speed, data-cursor, data-webgl...), clases reveladoras (webgl, gl, three, shader, particle, distortion, split, marquee, pin, parallax...), strings GLSL (gl_FragColor, uniform, varying), nombres de archivos de bundles, comentarios.
+3. Cruza esas pistas con las señales técnicas detectadas: si hay Three.js/WebGL/Pixi/shaders en las señales, DEBE haber al menos un componente del informe dedicado a esa pieza. Es un fallo grave omitir la parte 3D/WebGL de una web que la tiene: suele ser justo su componente más distintivo.
+4. Deduce el comportamiento probable de cada efecto a partir de la evidencia: qué se anima, con qué se dispara (scroll, ratón, carga, hover), qué librería lo implementa, qué aspecto tiene (colores, materiales, densidad de partículas, tipo de distorsión).
+5. Si el usuario ha indicado un interés concreto, dale prioridad absoluta: dedica los componentes del informe a lo que pide, estudiando con más detalle las partes del material relacionadas.
 
-Estos componentes se van a previsualizar dentro de un <iframe> en miniatura, donde es fácil que nadie mueva el ratón sobre ellos. Por eso, CADA componente cuyo efecto dependa de mousemove, hover u otra interacción del puntero DEBE cumplir ambas cosas:
-1. Seguir respondiendo a eventos reales del ratón/touch del usuario (no los elimines).
-2. Incluir además un "modo demo" automático: al cargar, simula con requestAnimationFrame un puntero virtual que se mueve en un patrón (p.ej. un círculo o figura en forma de ocho) durante unos segundos, alimentando la misma lógica que usarías con mousemove, para que el efecto sea visible sin que nadie tenga que mover el ratón. Si el usuario interactúa de verdad con el ratón, el modo demo debe pausarse y ceder el control a la interacción real (puedes reanudarlo tras unos segundos de inactividad).
+Para cada componente del informe escribe "technicalNotes" MUY detalladas (8-15 frases): son la especificación que otro desarrollador usará para recrearlo sin ver la web. Incluye: estructura DOM necesaria, librerías concretas con versión/CDN sugerido, paleta de colores y tipografía aproximadas, parámetros de animación (duraciones, easings, triggers de scroll), y para WebGL/shaders: tipo de geometría, comportamiento del material/shader (ondas, ruido, distorsión en hover, partículas que reaccionan al ratón...), movimiento de cámara y luces.
 
-Esto aplica también a cualquier otro efecto que normalmente requiera interacción (hover en botones, scroll, drag): siempre que sea razonable, añade una animación o ciclo automático que demuestre el comportamiento nada más abrir el snippet.`;
+Identifica entre 2 y 5 componentes, ordenados de más a menos impactante. Prioriza siempre: (1) lo que pida el usuario, (2) escenas 3D/WebGL/shaders, (3) interacciones complejas de scroll o ratón, (4) lo demás. No incluyas componentes triviales (un botón con hover simple, un menú estático) salvo que el usuario los pida.`;
 
-const EXTRACT_JSON_INSTRUCTIONS = `Responde EXCLUSIVAMENTE con un objeto JSON válido (sin markdown ni texto adicional) con esta estructura exacta:
-{
-  "components": [
-    {
-      "name": "Nombre corto y descriptivo",
-      "description": "Descripción de 1-3 frases del comportamiento visual",
-      "tags": ["tag1", "tag2"],
-      "libraries": ["GSAP"],
-      "html": "<!DOCTYPE html>... documento HTML completo y autocontenido ..."
-    }
-  ]
-}`;
-
-const EXTRACT_TOOL: Anthropic.Tool = {
-  name: 'report_components',
-  description: 'Reporta los componentes visuales identificados y sus recreaciones autocontenidas en HTML.',
+const ANALYZE_TOOL: Anthropic.Tool = {
+  name: 'report_analysis',
+  description: 'Reporta el plan detallado de componentes identificados tras estudiar la página.',
   input_schema: {
     type: 'object',
     properties: {
@@ -137,20 +170,21 @@ const EXTRACT_TOOL: Anthropic.Tool = {
             tags: {
               type: 'array',
               items: { type: 'string' },
-              description: 'Etiquetas en minúsculas para filtrar este componente',
+              description:
+                'Etiquetas en minúsculas (ej: "hero", "scroll-reveal", "cursor", "webgl", "shader", "3d", "parallax", "text-animation")',
             },
             libraries: {
               type: 'array',
               items: { type: 'string' },
-              description: 'Librerías usadas en la recreación',
+              description: 'Librerías para la recreación (ej: "Three.js", "GSAP", "CSS")',
             },
-            html: {
+            technicalNotes: {
               type: 'string',
               description:
-                'Documento HTML completo y autocontenido que recrea el componente. Si depende de WebGL/Three.js o de la posición del ratón, debe incluir un bucle de animación/demo automático visible sin interacción.',
+                'Especificación técnica muy detallada (8-15 frases) para recrear el componente: DOM, librerías+CDN, colores, tipografía, parámetros de animación, y detalles de shader/geometría/cámara si aplica.',
             },
           },
-          required: ['name', 'description', 'tags', 'libraries', 'html'],
+          required: ['name', 'description', 'tags', 'libraries', 'technicalNotes'],
         },
       },
     },
@@ -158,18 +192,27 @@ const EXTRACT_TOOL: Anthropic.Tool = {
   },
 };
 
-function sanitizeComponents(input: unknown): ExtractedComponent[] {
+const ANALYZE_JSON_INSTRUCTIONS = `Responde EXCLUSIVAMENTE con un objeto JSON válido (sin markdown ni texto adicional):
+{
+  "components": [
+    {
+      "name": "...",
+      "description": "...",
+      "tags": ["..."],
+      "libraries": ["..."],
+      "technicalNotes": "Especificación técnica muy detallada (8-15 frases)..."
+    }
+  ]
+}`;
+
+function sanitizePlans(input: unknown): ComponentPlan[] {
   if (!input || typeof input !== 'object') return [];
   const components = (input as { components?: unknown }).components;
   if (!Array.isArray(components)) return [];
-
   return components
     .filter(
-      (c): c is ExtractedComponent =>
-        !!c &&
-        typeof c === 'object' &&
-        typeof (c as any).name === 'string' &&
-        typeof (c as any).html === 'string'
+      (c): c is ComponentPlan =>
+        !!c && typeof c === 'object' && typeof (c as any).name === 'string'
     )
     .map((c) => ({
       name: c.name,
@@ -178,56 +221,156 @@ function sanitizeComponents(input: unknown): ExtractedComponent[] {
       libraries: Array.isArray(c.libraries)
         ? c.libraries.filter((l: unknown) => typeof l === 'string')
         : [],
-      html: c.html,
+      technicalNotes: typeof c.technicalNotes === 'string' ? c.technicalNotes : '',
     }));
 }
+
+// ---------------------------------------------------------------------------
+// FASE 2 — Generación dedicada: una llamada por componente, con todo el
+// presupuesto de salida para un único snippet de alta calidad.
+// ---------------------------------------------------------------------------
+
+const BUILD_SYSTEM_PROMPT = `Eres un desarrollador creativo de élite (nivel Awwwards) especializado en demos autocontenidas: GSAP, Three.js, shaders GLSL, animación de texto, scroll-driven animations.
+
+Recibirás la especificación técnica de UN componente visual/interactivo observado en una web real. Tu trabajo: construir una RECREACIÓN AUTOCONTENIDA de máxima calidad — un único documento HTML completo (<!DOCTYPE html>, <head>, <body>) con todo el CSS en <style> y todo el JS en <script>, que funcione abierto directamente en un navegador sin build step.
+
+Exigencias de calidad:
+- El resultado debe ser visualmente IMPACTANTE, no un placeholder. Cuida la composición, paleta, tipografía (puedes cargar Google Fonts), spacing y detalles (grain, vignettes, blur, glow) igual que lo haría la web original.
+- Sigue las notas técnicas de la especificación con fidelidad: librerías indicadas (cárgalas vía CDN público: cdnjs, unpkg o jsdelivr), parámetros de animación, colores.
+- Código limpio y comentado en los puntos clave (configuración del shader, parámetros del timeline...), para que sirva como referencia reutilizable.
+
+Si el componente es 3D/WebGL/shaders:
+- Usa Three.js vía CDN (unpkg.com/three@0.160.0/build/three.min.js) u otra librería indicada en la especificación.
+- Implementa shaders GLSL reales en ShaderMaterial cuando la especificación hable de distorsión, ruido, ondas u efectos de material: no lo simules con CSS.
+- Bucle requestAnimationFrame siempre activo: la escena debe verse viva desde el primer segundo, sin interacción.
+- Gestiona el resize de window para adaptarte al contenedor.
+
+Si el efecto depende del ratón (cursor custom, magnetismo, parallax con mousemove, tilt, distorsión en hover):
+- Mantén los listeners reales de ratón/touch.
+- Añade ADEMÁS un modo demo automático: un puntero virtual animado con requestAnimationFrame (trayectoria suave, p.ej. curvas de Lissajous) que alimenta la misma lógica del mousemove desde la carga, se pausa cuando el usuario mueve el ratón de verdad, y se reanuda tras unos segundos de inactividad. El efecto debe ser plenamente visible en un iframe en miniatura sin que nadie toque nada.
+
+Si el efecto depende del scroll (ScrollTrigger, reveals, pin, parallax):
+- Incluye suficiente contenido para que haya recorrido de scroll y configura un auto-scroll suave de demostración (ida y vuelta en bucle) que se pause si el usuario hace scroll manual.
+
+El snippet debe centrarse en demostrar SOLO este componente, con contenido de ejemplo coherente con la estética original.`;
+
+const BUILD_TOOL: Anthropic.Tool = {
+  name: 'report_component_html',
+  description: 'Devuelve el documento HTML autocontenido que recrea el componente.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      html: {
+        type: 'string',
+        description: 'Documento HTML completo y autocontenido.',
+      },
+    },
+    required: ['html'],
+  },
+};
+
+const BUILD_JSON_INSTRUCTIONS = `Responde EXCLUSIVAMENTE con un objeto JSON válido (sin markdown ni texto adicional):
+{ "html": "<!DOCTYPE html>... documento completo ..." }`;
+
+async function buildComponentHtml(
+  provider: ProviderId,
+  plan: ComponentPlan,
+  sourceUrl: string,
+  focus: string
+): Promise<string | null> {
+  const user = [
+    `URL de la web original: ${sourceUrl}`,
+    focus ? `Interés del usuario: ${focus}` : '',
+    '',
+    `## Componente a recrear: ${plan.name}`,
+    '',
+    `Descripción: ${plan.description}`,
+    '',
+    `Librerías previstas: ${plan.libraries.join(', ') || 'CSS/JS vanilla'}`,
+    '',
+    `Especificación técnica:`,
+    plan.technicalNotes,
+  ].join('\n');
+
+  const result = await callStructured({
+    provider,
+    system: BUILD_SYSTEM_PROMPT,
+    user,
+    tool: BUILD_TOOL,
+    jsonInstructions: BUILD_JSON_INSTRUCTIONS,
+    anthropicMaxTokens: 16000,
+  });
+
+  const html = (result as { html?: unknown })?.html;
+  return typeof html === 'string' && html.trim().length > 0 ? html : null;
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline completo de extracción
+// ---------------------------------------------------------------------------
 
 export async function extractComponentsFromHtml(
   provider: ProviderId,
   sourceUrl: string,
-  pageMaterial: string
+  pageMaterial: string,
+  focus = ''
 ): Promise<ExtractedComponent[]> {
-  const userContent = `URL de origen: ${sourceUrl}\n\nMaterial extraído de la página (HTML/CSS/JS, puede estar truncado):\n\n${pageMaterial}`;
+  // Fase 1: estudio a fondo → plan de componentes.
+  const analysisUser = [
+    `URL de origen: ${sourceUrl}`,
+    focus
+      ? `\nINTERÉS DEL USUARIO (prioridad absoluta al elegir y detallar componentes): ${focus}`
+      : '',
+    '',
+    'Material extraído de la página (HTML/CSS/JS, puede estar truncado):',
+    '',
+    pageMaterial,
+  ].join('\n');
 
-  if (provider === 'anthropic') {
-    const { client, model } = getAnthropicClient();
-    const response = await client.messages.create({
-      model,
-      max_tokens: 16000,
-      system: EXTRACT_SYSTEM_PROMPT,
-      tools: [EXTRACT_TOOL],
-      tool_choice: { type: 'tool', name: 'report_components' },
-      messages: [{ role: 'user', content: userContent }],
-    });
-
-    const toolUse = response.content.find(
-      (block): block is Anthropic.ToolUseBlock => block.type === 'tool_use'
-    );
-    if (!toolUse) throw new Error('El modelo no devolvió componentes estructurados.');
-    return sanitizeComponents(toolUse.input);
-  }
-
-  const { client, model, maxOutputTokens } = getOpenAICompatClient(provider);
-  const response = await client.chat.completions.create({
-    model,
-    max_tokens: maxOutputTokens,
-    response_format: { type: 'json_object' },
-    messages: [
-      { role: 'system', content: `${EXTRACT_SYSTEM_PROMPT}\n\n${EXTRACT_JSON_INSTRUCTIONS}` },
-      { role: 'user', content: userContent },
-    ],
+  const analysis = await callStructured({
+    provider,
+    system: ANALYZE_SYSTEM_PROMPT,
+    user: analysisUser,
+    tool: ANALYZE_TOOL,
+    jsonInstructions: ANALYZE_JSON_INSTRUCTIONS,
+    anthropicMaxTokens: 8000,
   });
 
-  const raw = response.choices[0]?.message?.content;
-  if (!raw) throw new Error('El modelo no devolvió respuesta.');
+  const plans = sanitizePlans(analysis).slice(0, 5);
+  if (plans.length === 0) return [];
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error('El modelo devolvió un JSON inválido. Inténtalo de nuevo.');
+  // Fase 2: generación dedicada por componente, en paralelo. Cada llamada
+  // dispone del presupuesto completo de tokens de salida para un solo snippet.
+  const results = await Promise.allSettled(
+    plans.map((plan) => buildComponentHtml(provider, plan, sourceUrl, focus))
+  );
+
+  const components: ExtractedComponent[] = [];
+  results.forEach((result, i) => {
+    if (result.status === 'fulfilled' && result.value) {
+      const plan = plans[i];
+      components.push({
+        name: plan.name,
+        description: plan.description,
+        tags: plan.tags,
+        libraries: plan.libraries,
+        html: result.value,
+      });
+    }
+  });
+
+  if (components.length === 0) {
+    const firstError = results.find(
+      (r): r is PromiseRejectedResult => r.status === 'rejected'
+    );
+    throw new Error(
+      firstError?.reason instanceof Error
+        ? `La generación de componentes falló: ${firstError.reason.message}`
+        : 'La generación de componentes no produjo resultados. Inténtalo de nuevo.'
+    );
   }
-  return sanitizeComponents(parsed);
+
+  return components;
 }
 
 const PROMPT_GENERATION_SYSTEM = `Eres un experto en redactar prompts de ingeniería para LLMs que desarrollan websites a partir de componentes visuales.

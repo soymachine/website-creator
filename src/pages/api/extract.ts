@@ -6,10 +6,12 @@ export const prerender = false;
 
 export const POST: APIRoute = async ({ request }) => {
   let url: string | undefined;
+  let focus = '';
   let provider = parseProvider(undefined);
   try {
     const body = await request.json();
     url = body?.url;
+    focus = typeof body?.focus === 'string' ? body.focus.slice(0, 2000) : '';
     provider = parseProvider(body?.provider);
   } catch {
     return jsonError('Cuerpo de petición inválido.', 400);
@@ -29,7 +31,7 @@ export const POST: APIRoute = async ({ request }) => {
 
   try {
     const material = await fetchPageMaterial(parsed.toString());
-    const components = await extractComponentsFromHtml(provider, parsed.toString(), material);
+    const components = await extractComponentsFromHtml(provider, parsed.toString(), material, focus);
     return new Response(JSON.stringify({ components }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },

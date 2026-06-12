@@ -1,7 +1,11 @@
-const MAX_HTML_CHARS = 60000;
-const MAX_ASSET_CHARS = 20000;
-const MAX_ASSETS = 4;
+const MAX_HTML_CHARS = 150000;
+const MAX_ASSET_CHARS = 50000;
+const MAX_ASSETS = 8;
 const FETCH_TIMEOUT_MS = 15000;
+
+// Assets that add noise but no visual signal (analytics, consent, ads...).
+const ASSET_BLOCKLIST =
+  /google-?analytics|googletagmanager|gtag|gtm\.js|facebook|fbevents|hotjar|clarity|segment|mixpanel|amplitude|intercom|hubspot|cookie|consent|onetrust|doubleclick|adsbygoogle|sentry|newrelic|datadog/i;
 
 async function fetchWithTimeout(url: string): Promise<Response> {
   const controller = new AbortController();
@@ -64,19 +68,26 @@ export async function fetchPageMaterial(sourceUrl: string): Promise<string> {
   parts.push(`--- HTML (${sourceUrl}) ---\n${html.slice(0, MAX_HTML_CHARS)}`);
 
   const assetUrls: string[] = [];
+  const seen = new Set<string>();
+
+  const pushAsset = (raw: string) => {
+    if (assetUrls.length >= MAX_ASSETS) return;
+    if (ASSET_BLOCKLIST.test(raw)) return;
+    const resolved = resolveUrl(raw, sourceUrl);
+    if (!resolved || seen.has(resolved)) return;
+    seen.add(resolved);
+    assetUrls.push(resolved);
+  };
+
+  let match: RegExpExecArray | null;
+
+  // Scripts first: on JS-heavy sites the app bundle carries far more visual
+  // signal (GSAP timelines, Three.js setup, shaders) than the stylesheets.
+  const scriptRe = /<script[^>]+src=["']([^"']+)["'][^>]*>/gi;
+  while ((match = scriptRe.exec(html))) pushAsset(match[1]);
 
   const linkRe = /<link[^>]+rel=["']stylesheet["'][^>]*href=["']([^"']+)["'][^>]*>/gi;
-  let match: RegExpExecArray | null;
-  while ((match = linkRe.exec(html)) && assetUrls.length < MAX_ASSETS) {
-    const resolved = resolveUrl(match[1], sourceUrl);
-    if (resolved) assetUrls.push(resolved);
-  }
-
-  const scriptRe = /<script[^>]+src=["']([^"']+)["'][^>]*>/gi;
-  while ((match = scriptRe.exec(html)) && assetUrls.length < MAX_ASSETS) {
-    const resolved = resolveUrl(match[1], sourceUrl);
-    if (resolved) assetUrls.push(resolved);
-  }
+  while ((match = linkRe.exec(html))) pushAsset(match[1]);
 
   // Surface library/asset filenames even if we don't fetch their full content —
   // these are often the strongest signal of WebGL/Three.js usage on heavily
