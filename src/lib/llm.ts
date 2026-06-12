@@ -252,6 +252,24 @@ Si el efecto depende del ratón (cursor custom, magnetismo, parallax con mousemo
 Si el efecto depende del scroll (ScrollTrigger, reveals, pin, parallax):
 - Incluye suficiente contenido para que haya recorrido de scroll y configura un auto-scroll suave de demostración (ida y vuelta en bucle) que se pause si el usuario hace scroll manual.
 
+LIBRERÍAS VÍA CDN — reglas estrictas:
+- Carga cada librería con una etiqueta <script src="..."></script> en el <head> o al principio del <body>, SIN los atributos "defer", "async" ni type="module". Deben ejecutarse de forma síncrona y en orden, ANTES de cualquier <script> que use sus variables globales (THREE, gsap, ScrollTrigger, Lenis, PIXI, anime, Matter, SplitType...).
+- Usa siempre builds UMD (no ESM) para que la librería quede expuesta como variable global. URLs verificadas que puedes usar tal cual:
+  - Three.js: https://unpkg.com/three@0.160.0/build/three.min.js (expone THREE)
+  - GSAP: https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js (expone gsap)
+  - GSAP ScrollTrigger: https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js (expone ScrollTrigger; cargar DESPUÉS de gsap.min.js, y llamar gsap.registerPlugin(ScrollTrigger))
+  - Lenis: https://unpkg.com/lenis@1.1.13/dist/lenis.min.js (expone Lenis; NO uses lenis.js de jsdelivr con type="module")
+  - Pixi.js: https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.4.2/pixi.min.js (expone PIXI)
+  - anime.js: https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js (expone anime)
+  - Matter.js: https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js (expone Matter)
+  - SplitType: https://unpkg.com/split-type@0.3.4/umd/index.min.js (expone SplitType)
+- Antes de usar cualquier global de librería, verifica que no produzca "ReferenceError": el orden de los <script> en el documento debe garantizar que la librería ya esté cargada y ejecutada cuando tu código la referencia (los <script> sin defer/async se ejecutan en orden antes de seguir parseando el resto del documento).
+
+LÍMITE DE TAMAÑO — evita respuestas truncadas:
+- Tu respuesta se corta si supera el presupuesto de tokens, lo que produce HTML incompleto e inválido (errores como "Unexpected end of input"). Para evitarlo: prioriza SIEMPRE terminar el documento completo (incluyendo el cierre </script></body></html>) por encima de añadir más detalle.
+- Sé eficiente: CSS y JS compactos pero legibles, sin contenido de relleno innecesario, sin comentarios largos. Si el efecto es muy complejo, simplifica geometría/cantidad de elementos/partículas antes que arriesgarte a no poder cerrar el documento.
+- El HTML devuelto SIEMPRE debe ser un documento completo y bien formado que termine literalmente en "</html>".
+
 El snippet debe centrarse en demostrar SOLO este componente, con contenido de ejemplo coherente con la estética original.`;
 
 const BUILD_TOOL: Anthropic.Tool = {
@@ -272,13 +290,17 @@ const BUILD_TOOL: Anthropic.Tool = {
 const BUILD_JSON_INSTRUCTIONS = `Responde EXCLUSIVAMENTE con un objeto JSON válido (sin markdown ni texto adicional):
 { "html": "<!DOCTYPE html>... documento completo ..." }`;
 
+function isCompleteHtml(html: string): boolean {
+  return /<\/html>\s*$/i.test(html.trim());
+}
+
 async function buildComponentHtml(
   provider: ProviderId,
   plan: ComponentPlan,
   sourceUrl: string,
   focus: string
 ): Promise<string | null> {
-  const user = [
+  const baseUser = [
     `URL de la web original: ${sourceUrl}`,
     focus ? `Interés del usuario: ${focus}` : '',
     '',
@@ -292,17 +314,25 @@ async function buildComponentHtml(
     plan.technicalNotes,
   ].join('\n');
 
-  const result = await callStructured({
-    provider,
-    system: BUILD_SYSTEM_PROMPT,
-    user,
-    tool: BUILD_TOOL,
-    jsonInstructions: BUILD_JSON_INSTRUCTIONS,
-    anthropicMaxTokens: 16000,
-  });
+  const retryUser = `${baseUser}\n\nATENCIÓN: en un intento anterior tu respuesta quedó truncada (HTML incompleto e inválido). Esta vez genera una versión MÁS SENCILLA Y CONCISA — menos elementos/partículas, CSS y JS más compactos, sin comentarios largos — priorizando ante todo que el documento HTML quede completo y termine en "</html>".`;
 
-  const html = (result as { html?: unknown })?.html;
-  return typeof html === 'string' && html.trim().length > 0 ? html : null;
+  for (const user of [baseUser, retryUser]) {
+    const result = await callStructured({
+      provider,
+      system: BUILD_SYSTEM_PROMPT,
+      user,
+      tool: BUILD_TOOL,
+      jsonInstructions: BUILD_JSON_INSTRUCTIONS,
+      anthropicMaxTokens: 16000,
+    });
+
+    const html = (result as { html?: unknown })?.html;
+    if (typeof html === 'string' && html.trim().length > 0 && isCompleteHtml(html)) {
+      return html;
+    }
+  }
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------
