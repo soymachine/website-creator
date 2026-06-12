@@ -1,10 +1,13 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { ExtractedComponent } from '../types';
 
-const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6';
+// Astro carga .env en import.meta.env (no en process.env) durante el dev
+// server, así que comprobamos ambos.
+const MODEL =
+  import.meta.env.ANTHROPIC_MODEL || process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6';
 
 function getClient(): Anthropic {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = import.meta.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new Error(
       'Falta ANTHROPIC_API_KEY. Configúrala en tu archivo .env (ver .env.example).'
