@@ -21,6 +21,7 @@ interface OpenAICompatConfig {
   baseURL: string;
   defaultModel: string;
   modelVar: string;
+  maxOutputTokens: number;
 }
 
 const OPENAI_COMPAT: Record<Exclude<ProviderId, 'anthropic'>, OpenAICompatConfig> = {
@@ -29,12 +30,15 @@ const OPENAI_COMPAT: Record<Exclude<ProviderId, 'anthropic'>, OpenAICompatConfig
     baseURL: 'https://api.deepseek.com/v1',
     defaultModel: 'deepseek-chat',
     modelVar: 'DEEPSEEK_MODEL',
+    // deepseek-chat caps completions at 8K output tokens.
+    maxOutputTokens: 8000,
   },
   kimi: {
     keyVar: 'KIMI_API_KEY',
     baseURL: 'https://api.moonshot.ai/v1',
     defaultModel: 'kimi-k2-0905-preview',
     modelVar: 'KIMI_MODEL',
+    maxOutputTokens: 16000,
   },
 };
 
@@ -57,6 +61,7 @@ function getAnthropicClient(): { client: Anthropic; model: string } {
 function getOpenAICompatClient(provider: Exclude<ProviderId, 'anthropic'>): {
   client: OpenAI;
   model: string;
+  maxOutputTokens: number;
 } {
   const config = OPENAI_COMPAT[provider];
   const apiKey = env(config.keyVar);
@@ -66,22 +71,39 @@ function getOpenAICompatClient(provider: Exclude<ProviderId, 'anthropic'>): {
   return {
     client: new OpenAI({ apiKey, baseURL: config.baseURL }),
     model: env(config.modelVar) || config.defaultModel,
+    maxOutputTokens: config.maxOutputTokens,
   };
 }
 
-const EXTRACT_SYSTEM_PROMPT = `Eres un experto en frontend, animaciones web (GSAP, Framer Motion, Three.js, scroll-driven animations) y diseño de webs premiadas en Awwwards.
+const EXTRACT_SYSTEM_PROMPT = `Eres un experto en frontend, animaciones web (GSAP, Framer Motion, Three.js, WebGL, scroll-driven animations) y diseño de webs premiadas en Awwwards.
 
-Recibirás el HTML (y posiblemente fragmentos de CSS/JS referenciados) de una página web. Tu tarea es identificar los componentes visuales e interactivos más distintivos de esa página: heroes animados, menús con transiciones, cursores personalizados, reveals al hacer scroll, carruseles WebGL, marquees infinitos, efectos de parallax, etc.
+Recibirás el HTML (y posiblemente fragmentos de CSS/JS referenciados, además de una lista de "señales técnicas detectadas") de una página web. Tu tarea es identificar los componentes visuales e interactivos más distintivos de esa página: heroes animados, menús con transiciones, cursores personalizados, reveals al hacer scroll, escenas 3D/WebGL, fondos con shaders o partículas, carruseles, marquees infinitos, efectos de parallax, etc.
 
 Para CADA componente que identifiques, debes generar una RECREACIÓN AUTOCONTENIDA: un único documento HTML completo (con <!DOCTYPE html>, <head> y <body>) que incluya todo el CSS (en <style>) y JS (en <script>) necesario, y que demuestre visualmente el comportamiento del componente al abrirse en un navegador, sin ningún paso de build.
 
 Reglas importantes:
 - NO copies literalmente el código fuente de la web (probablemente esté minificado, ofuscado o sea inviable). En su lugar, REINTERPRETA el efecto visual de forma fiel y funcional, recreándolo con HTML/CSS/JS limpio y legible.
-- Si el componente usa una librería (GSAP, Three.js, anime.js, etc.), puedes cargarla mediante <script src="https://cdn..."> mediante un CDN público (cdnjs o unpkg).
+- Si el componente usa una librería (GSAP, Three.js, anime.js, Pixi.js, etc.), puedes cargarla mediante <script src="https://cdn..."> mediante un CDN público (cdnjs o unpkg).
 - Cada snippet debe ser visualmente atractivo y centrado en demostrar SOLO ese componente (puedes incluir un fondo oscuro neutro y algo de contenido de ejemplo).
 - Identifica entre 1 y 4 componentes, priorizando los más distintivos e interesantes visualmente.
-- Para "tags" usa palabras clave en minúsculas relevantes (ej: "hero", "scroll-reveal", "cursor", "marquee", "carousel", "navigation", "parallax", "3d", "text-animation").
-- Para "libraries" indica las librerías usadas en tu recreación (ej: "GSAP", "Three.js", "CSS", "anime.js"). Usa "CSS" si es solo CSS/JS vanilla.`;
+- Para "tags" usa palabras clave en minúsculas relevantes (ej: "hero", "scroll-reveal", "cursor", "marquee", "carousel", "navigation", "parallax", "3d", "text-animation", "webgl", "shader").
+- Para "libraries" indica las librerías usadas en tu recreación (ej: "GSAP", "Three.js", "Pixi.js", "CSS", "anime.js"). Usa "CSS" si es solo CSS/JS vanilla.
+
+## Componentes 3D / WebGL / shaders
+
+Si en el material recibido detectas señales de Three.js, WebGL crudo, Pixi.js, shaders GLSL o elementos <canvas>, NO los descartes ni los sustituyas por un componente más simple. Trátalos como prioritarios:
+- Recrea la escena con Three.js cargado vía CDN (ej. unpkg.com/three@0.160.0/build/three.min.js), montando un <canvas> a pantalla completa.
+- Usa primitivas razonables (geometrías, partículas, gradientes animados, distorsión con shaders simples en ShaderMaterial) que evoquen el mismo "mood" visual aunque no repliquen el shader exacto original.
+- Incluye un bucle de animación (requestAnimationFrame) para que la escena se vea viva nada más cargar, sin depender de interacción del usuario.
+- Maneja el evento resize de window para que el canvas/renderer se ajuste al iframe.
+
+## Componentes con interactividad basada en el ratón (cursores, magnetismo, parallax, tilt 3D, etc.)
+
+Estos componentes se van a previsualizar dentro de un <iframe> en miniatura, donde es fácil que nadie mueva el ratón sobre ellos. Por eso, CADA componente cuyo efecto dependa de mousemove, hover u otra interacción del puntero DEBE cumplir ambas cosas:
+1. Seguir respondiendo a eventos reales del ratón/touch del usuario (no los elimines).
+2. Incluir además un "modo demo" automático: al cargar, simula con requestAnimationFrame un puntero virtual que se mueve en un patrón (p.ej. un círculo o figura en forma de ocho) durante unos segundos, alimentando la misma lógica que usarías con mousemove, para que el efecto sea visible sin que nadie tenga que mover el ratón. Si el usuario interactúa de verdad con el ratón, el modo demo debe pausarse y ceder el control a la interacción real (puedes reanudarlo tras unos segundos de inactividad).
+
+Esto aplica también a cualquier otro efecto que normalmente requiera interacción (hover en botones, scroll, drag): siempre que sea razonable, añade una animación o ciclo automático que demuestre el comportamiento nada más abrir el snippet.`;
 
 const EXTRACT_JSON_INSTRUCTIONS = `Responde EXCLUSIVAMENTE con un objeto JSON válido (sin markdown ni texto adicional) con esta estructura exacta:
 {
@@ -124,7 +146,8 @@ const EXTRACT_TOOL: Anthropic.Tool = {
             },
             html: {
               type: 'string',
-              description: 'Documento HTML completo y autocontenido que recrea el componente',
+              description:
+                'Documento HTML completo y autocontenido que recrea el componente. Si depende de WebGL/Three.js o de la posición del ratón, debe incluir un bucle de animación/demo automático visible sin interacción.',
             },
           },
           required: ['name', 'description', 'tags', 'libraries', 'html'],
@@ -184,10 +207,10 @@ export async function extractComponentsFromHtml(
     return sanitizeComponents(toolUse.input);
   }
 
-  const { client, model } = getOpenAICompatClient(provider);
+  const { client, model, maxOutputTokens } = getOpenAICompatClient(provider);
   const response = await client.chat.completions.create({
     model,
-    max_tokens: 16000,
+    max_tokens: maxOutputTokens,
     response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: `${EXTRACT_SYSTEM_PROMPT}\n\n${EXTRACT_JSON_INSTRUCTIONS}` },
@@ -255,10 +278,10 @@ export async function generateMasterPrompt(input: {
     return textIterator();
   }
 
-  const { client, model } = getOpenAICompatClient(input.provider);
+  const { client, model, maxOutputTokens } = getOpenAICompatClient(input.provider);
   const stream = await client.chat.completions.create({
     model,
-    max_tokens: 8000,
+    max_tokens: maxOutputTokens,
     stream: true,
     messages: [
       { role: 'system', content: PROMPT_GENERATION_SYSTEM },
