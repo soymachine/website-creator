@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { generateMasterPrompt } from '../../lib/anthropic';
+import { generateMasterPrompt, parseProvider } from '../../lib/llm';
 import { getComponentHtml, getComponentMeta, savePromptRecord } from '../../lib/library';
 
 export const prerender = false;
@@ -14,6 +14,7 @@ export const POST: APIRoute = async ({ request }) => {
 
   const slugs: unknown = body?.slugs;
   const context: string = typeof body?.context === 'string' ? body.context : '';
+  const provider = parseProvider(body?.provider);
 
   if (!Array.isArray(slugs) || slugs.length === 0) {
     return jsonError('Selecciona al menos un componente.', 400);
@@ -34,7 +35,7 @@ export const POST: APIRoute = async ({ request }) => {
 
   let textStream: AsyncIterable<string>;
   try {
-    textStream = await generateMasterPrompt({ components, context });
+    textStream = await generateMasterPrompt({ provider, components, context });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Error al generar el prompt.';
     return jsonError(message, 502);

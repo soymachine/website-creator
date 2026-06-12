@@ -1,14 +1,16 @@
 import type { APIRoute } from 'astro';
 import { fetchPageMaterial } from '../../lib/fetchPage';
-import { extractComponentsFromHtml } from '../../lib/anthropic';
+import { extractComponentsFromHtml, parseProvider } from '../../lib/llm';
 
 export const prerender = false;
 
 export const POST: APIRoute = async ({ request }) => {
   let url: string | undefined;
+  let provider = parseProvider(undefined);
   try {
     const body = await request.json();
     url = body?.url;
+    provider = parseProvider(body?.provider);
   } catch {
     return jsonError('Cuerpo de petición inválido.', 400);
   }
@@ -27,7 +29,7 @@ export const POST: APIRoute = async ({ request }) => {
 
   try {
     const material = await fetchPageMaterial(parsed.toString());
-    const components = await extractComponentsFromHtml(parsed.toString(), material);
+    const components = await extractComponentsFromHtml(provider, parsed.toString(), material);
     return new Response(JSON.stringify({ components }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },

@@ -63,6 +63,12 @@ const allLibraries = [...new Set(components.flatMap((c) => c.libraries))].sort()
       <p class="panel-hint">Componentes seleccionados: <span id="panel-selection-list"></span></p>
       <label for="context-input">Contexto adicional (tipo de web, contenido, tono...)</label>
       <textarea id="context-input" rows="4" placeholder="Ej: Una landing page para un estudio de diseño, tono minimalista y elegante, en español..."></textarea>
+      <label for="provider-select">Modelo</label>
+      <select id="provider-select" class="provider-select">
+        <option value="anthropic">Claude (Anthropic)</option>
+        <option value="deepseek">DeepSeek</option>
+        <option value="kimi">Kimi (Moonshot)</option>
+      </select>
       <div class="panel-actions">
         <button class="btn btn-primary" id="generate-btn">Generar</button>
         <button class="btn" id="copy-btn" disabled>Copiar</button>
@@ -167,6 +173,15 @@ const allLibraries = [...new Set(components.flatMap((c) => c.libraries))].sort()
   .panel-hint { margin: 0; font-size: 0.85rem; color: var(--text-dim); }
   .panel label { font-size: 0.85rem; color: var(--text-dim); }
   .panel-actions { display: flex; gap: 0.5rem; }
+  .provider-select {
+    background: var(--bg-elev-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+    align-self: flex-start;
+  }
 
   .prompt-output {
     white-space: pre-wrap;
@@ -199,6 +214,12 @@ const allLibraries = [...new Set(components.flatMap((c) => c.libraries))].sort()
   const copyBtn = document.getElementById('copy-btn') as HTMLButtonElement;
   const promptOutput = document.getElementById('prompt-output')!;
   const contextInput = document.getElementById('context-input') as HTMLTextAreaElement;
+  const providerSelect = document.getElementById('provider-select') as HTMLSelectElement;
+
+  providerSelect.value = localStorage.getItem('llm-provider') || 'anthropic';
+  providerSelect.addEventListener('change', () => {
+    localStorage.setItem('llm-provider', providerSelect.value);
+  });
 
   const selected = new Set<string>();
 
@@ -276,7 +297,7 @@ const allLibraries = [...new Set(components.flatMap((c) => c.libraries))].sort()
       const res = await fetch('/api/generate-prompt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slugs: [...selected], context: contextInput.value }),
+        body: JSON.stringify({ slugs: [...selected], context: contextInput.value, provider: providerSelect.value }),
       });
 
       if (!res.ok || !res.body) {

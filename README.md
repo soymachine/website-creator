@@ -16,7 +16,8 @@ despliega.
    npm install
    ```
 
-2. Copia `.env.example` a `.env` y añade tu clave de la API de Anthropic:
+2. Copia `.env.example` a `.env` y añade la clave del proveedor (o proveedores)
+   que vayas a usar — basta con una:
 
    ```sh
    cp .env.example .env
@@ -24,7 +25,13 @@ despliega.
 
    ```env
    ANTHROPIC_API_KEY=sk-ant-...
+   DEEPSEEK_API_KEY=sk-...
+   KIMI_API_KEY=sk-...
    ```
+
+   El modelo se elige desde la UI con el selector "Modelo" (en la página de
+   extracción y en el panel de generación de prompts); la elección se recuerda
+   entre sesiones.
 
 3. Arranca el servidor de desarrollo:
 
@@ -65,7 +72,7 @@ despliega.
 ```text
 src/
 ├── lib/
-│   ├── anthropic.ts   # Llamadas a la API de Claude (extracción + generación)
+│   ├── llm.ts         # Proveedores LLM: Anthropic, DeepSeek, Kimi (extracción + generación)
 │   ├── fetchPage.ts   # Fetch acotado de HTML/CSS/JS de una URL
 │   └── library.ts     # Lectura/escritura de library/ en el filesystem
 ├── components/

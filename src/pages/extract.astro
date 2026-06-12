@@ -11,6 +11,11 @@ import Layout from '../layouts/Layout.astro';
 
   <form id="extract-form" class="extract-form">
     <input type="url" id="url-input" placeholder="https://ejemplo.com" required />
+    <select id="provider-select" class="provider-select" title="Modelo a usar">
+      <option value="anthropic">Claude (Anthropic)</option>
+      <option value="deepseek">DeepSeek</option>
+      <option value="kimi">Kimi (Moonshot)</option>
+    </select>
     <button type="submit" class="btn btn-primary" id="analyze-btn">Analizar</button>
   </form>
 
@@ -48,6 +53,14 @@ import Layout from '../layouts/Layout.astro';
     margin-bottom: 1rem;
   }
   .extract-form input { flex: 1; }
+  .provider-select {
+    background: var(--bg-elev-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+  }
 
   .status {
     min-height: 1.5rem;
@@ -124,6 +137,12 @@ import Layout from '../layouts/Layout.astro';
   const urlInput = document.getElementById('url-input') as HTMLInputElement;
   const analyzeBtn = document.getElementById('analyze-btn') as HTMLButtonElement;
   const statusEl = document.getElementById('status')!;
+  const providerSelect = document.getElementById('provider-select') as HTMLSelectElement;
+
+  providerSelect.value = localStorage.getItem('llm-provider') || 'anthropic';
+  providerSelect.addEventListener('change', () => {
+    localStorage.setItem('llm-provider', providerSelect.value);
+  });
   const resultsEl = document.getElementById('results')!;
   const template = document.getElementById('result-template') as HTMLTemplateElement;
 
@@ -233,7 +252,7 @@ import Layout from '../layouts/Layout.astro';
       const res = await fetch('/api/extract', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url, provider: providerSelect.value }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al analizar la URL.');

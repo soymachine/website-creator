@@ -14,7 +14,8 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",
     "@astrojs/node": "^10.1.4",
-    "astro": "^6.4.6"
+    "astro": "^6.4.6",
+    "openai": "^6.42.0"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.9",
