@@ -265,6 +265,16 @@ LIBRERÍAS VÍA CDN — reglas estrictas:
   - SplitType: https://unpkg.com/split-type@0.3.4/umd/index.min.js (expone SplitType)
 - Antes de usar cualquier global de librería, verifica que no produzca "ReferenceError": el orden de los <script> en el documento debe garantizar que la librería ya esté cargada y ejecutada cuando tu código la referencia (los <script> sin defer/async se ejecutan en orden antes de seguir parseando el resto del documento).
 
+IMÁGENES — reglas estrictas:
+- NUNCA uses las URLs de imágenes de la web original (suelen bloquear hotlinking) ni inventes URLs de CDNs de imágenes: producen 404 y el componente se ve roto.
+- NO uses source.unsplash.com: ese servicio fue descontinuado y ya no funciona.
+- Cuando el componente necesite fotografías (galerías, cards, heros con imagen, efectos de distorsión sobre imagen...), usa Lorem Picsum, que sirve fotos reales de Unsplash con URLs predecibles y gratuitas:
+  - Imagen estable concreta: https://picsum.photos/id/1015/800/600 (cambia el id 0-1080 y las dimensiones ancho/alto según necesites)
+  - Varias imágenes distintas en una galería: usa ids diferentes (ej: /id/1015/, /id/1025/, /id/1040/, /id/1060/...) o el parámetro ?random=1, ?random=2...
+  - Variantes: añade ?grayscale o ?blur=2 si encaja con la estética.
+- Para texturas WebGL (Three.js/Pixi), carga la imagen de picsum.photos con crossOrigin="anonymous" (TextureLoader.setCrossOrigin o img.crossOrigin) para no contaminar el canvas.
+- Si la estética pide algo más abstracto que una foto, genera la imagen tú mismo: gradientes CSS, SVG inline, ruido procedural en canvas o shaders. Es preferible a una foto que no pegue.
+
 LÍMITE DE TAMAÑO — evita respuestas truncadas:
 - Tu respuesta se corta si supera el presupuesto de tokens, lo que produce HTML incompleto e inválido (errores como "Unexpected end of input"). Para evitarlo: prioriza SIEMPRE terminar el documento completo (incluyendo el cierre </script></body></html>) por encima de añadir más detalle.
 - Sé eficiente: CSS y JS compactos pero legibles, sin contenido de relleno innecesario, sin comentarios largos. Si el efecto es muy complejo, simplifica geometría/cantidad de elementos/partículas antes que arriesgarte a no poder cerrar el documento.
